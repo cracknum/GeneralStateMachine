@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  示例：通用状态机配置（非交互）
+  描述 DICOM 加载流程的生命周期：空闲 → 加载中 → 就绪/错误 → 已释放。
+
+  结构（参考 MITK 配置驱动思想，通用化）：
+    stateMachine[name, initial] → state[name, entryAction*, exitAction*]
+      → transition[event, target] → condition* / action*
+
+  语义：
+    - transition 的 conditions 按序评估，全部为 true 才执行转移
+    - 转移顺序：旧状态 exitActions → transition actions → 新状态 entryActions
+    - handleEvent 传入的事件无匹配转移时被忽略（状态不变）
+
+  动作/条件在 StateMachine 派生类中绑定到成员函数
+  （connectAction/connectCondition 或 CONNECT_STATE_MACHINE_ACTION/CONDITION 宏），
+  XML 只按名字引用，运行时按名字查绑定表分发（MITK 新版 EventStateMachine 风格）。
+-->
+<stateMachine name="volume_load" initial="IDLE">
+    <state name="IDLE">
+        <entryAction name="log_state_entry"/>
+        <transition event="load_requested" target="LOADING">
+            <condition name="path_valid"/>
+            <action name="begin_load"/>
+            <action name="log_state_entry"/>
+        </transition>
+    </state>
+
+    <state name="LOADING">
+        <entryAction name="log_state_entry"/>
+        <transition event="load_finished" target="READY">
+            <action name="finalize_volume"/>
+        </transition>
+        <transition event="load_failed" target="ERROR">
+            <action name="report_load_error"/>
+        </transition>
+    </state>
+
+    <state name="READY">
+        <entryAction name="log_state_entry"/>
+        <exitAction name="log_state_exit"/>
+        <transition event="release_requested" target="RELEASED">
+            <action name="release_volume"/>
+        </transition>
+    </state>
+
+    <state name="ERROR">
+        <entryAction name="log_state_entry"/>
+        <transition event="retry" target="LOADING">
+            <action name="begin_load"/>
+        </transition>
+        <transition event="release_requested" target="RELEASED"/>
+    </state>
+
+    <state name="RELEASED">
+        <entryAction name="log_state_entry"/>
+    </state>
+</stateMachine>

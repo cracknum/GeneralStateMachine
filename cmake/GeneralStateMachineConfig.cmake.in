@@ -1,0 +1,11 @@
+@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+
+# Qt 大版本在构建本库时确定（Qt6/Qt5 均可，见 CMakeLists.txt）
+set(GeneralStateMachine_QT_MAJOR "@QT_VERSION_MAJOR@")
+find_dependency(Qt${GeneralStateMachine_QT_MAJOR} CONFIG COMPONENTS Core)
+
+include("${CMAKE_CURRENT_LIST_DIR}/GeneralStateMachineTargets.cmake")
+
+check_required_components(GeneralStateMachine)
