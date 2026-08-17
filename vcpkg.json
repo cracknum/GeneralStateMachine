@@ -1,0 +1,10 @@
+{
+  "name": "general-state-machine",
+  "version-string": "1.0.0",
+  "description": "Standalone XML-driven state machine library (Qt5/Qt6 compatible; use qt5-base instead of qtbase for Qt5 builds)",
+  "dependencies": [
+    "spdlog",
+    "gtest"
+  ],
+  "builtin-baseline": "94a541197763a4f449a1b91478df48c0584a6256"
+}
