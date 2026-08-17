@@ -1,0 +1,77 @@
+# This starter workflow is for a CMake project running on a single platform. There is a different starter workflow if you need cross-platform coverage.
+# See: https://github.com/actions/starter-workflows/blob/main/ci/cmake-multi-platform.yml
+name: General State Machine Action
+
+on:
+  push:
+    branches: ["main" ]
+  pull_request:
+    branches: ["main" ]
+
+jobs:
+  build:
+    name: Build (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ windows-latest, ubuntu-latest ]
+
+    env:
+      # CMakeLists.txt 在未显式传入 CMAKE_TOOLCHAIN_FILE 时读取该变量
+      VCPKG_ROOT: ${{ github.workspace }}/vcpkg
+      # vcpkg 二进制缓存目录（actions/cache 持久化，跨运行复用编译产物）
+      VCPKG_BINARY_SOURCES: "clear;files,${{ github.workspace }}/vcpkg-cache,readwrite"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # ---- 安装 vcpkg（manifest 模式：configure 时按 vcpkg.json 自动安装 spdlog/gtest/fmt）----
+      - name: Setup vcpkg
+        shell: bash
+        run: |
+          git clone --depth 1 https://github.com/microsoft/vcpkg.git "${VCPKG_ROOT}"
+          "${VCPKG_ROOT}/bootstrap-vcpkg.sh" -disableMetrics
+
+      - name: Cache vcpkg
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ env.VCPKG_ROOT }}/installed
+            ${{ env.VCPKG_ROOT }}/packages
+            ${{ env.VCPKG_ROOT }}/downloads
+            ${{ github.workspace }}/vcpkg-cache
+          key: vcpkg-${{ runner.os }}-${{ hashFiles('vcpkg.json') }}
+          restore-keys: |
+            vcpkg-${{ runner.os }}-
+
+      # ---- 安装预编译 Qt（6.8 LTS；内置缓存，含 Qt6_DIR/QT_ROOT_DIR 环境变量）----
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.8.*'
+          cache: true
+
+      # ---- 配置：显式传入 vcpkg toolchain（也可只靠 VCPKG_ROOT 环境变量）----
+      - name: Configure
+        shell: bash
+        run: |
+          cmake -S . -B build \
+            -DCMAKE_TOOLCHAIN_FILE="${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake" \
+            -DCMAKE_PREFIX_PATH="${QT_ROOT_DIR}" \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_TESTING=ON
+
+      - name: Build
+        shell: bash
+        run: cmake --build build --config Release --parallel
+
+      - name: Test
+        shell: bash
+        run: ctest --test-dir build -C Release --output-on-failure
+
+      # ---- 验证安装目标（find_package 消费方用的目录布局）----
+      - name: Install
+        shell: bash
+        run: cmake --install build --config Release --prefix "${GITHUB_WORKSPACE}/install"
+
