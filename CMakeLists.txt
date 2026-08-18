@@ -9,16 +9,43 @@ if(NOT CMAKE_TOOLCHAIN_FILE)
 endif()
 
 # ============================================================
-#  版本配置：cmake/version.json（单一来源）
-#  解读逻辑封装在 cmake/VersionConfig.cmake，各模块可复用；
+#  项目声明：必须先于下方 find_package/FetchContent 执行，
+#  因为 CMAKE_TOOLCHAIN_FILE（vcpkg）由第一次 project() 加载；
+#  版本号由 read_version() 读取 version.json 后手动补充。
+# ============================================================
+project(GeneralStateMachine LANGUAGES CXX)
+
+# ============================================================
+#  通用 CMake 模块：CommonCMake（独立仓库）
+#  优先 find_package(CommonCMake CONFIG)（已安装场景）；
+#  否则 FetchContent 从 GitHub 自动拉取（首次构建需联网）。
+#  GIT_TAG 固定为发布 tag v1.0.0.0，保证构建可复现。
+# ============================================================
+find_package(CommonCMake CONFIG QUIET)
+if(NOT CommonCMake_FOUND)
+    include(FetchContent)
+    FetchContent_Declare(CommonCMake
+        GIT_REPOSITORY https://github.com/cracknum/CommonCMake.git
+        GIT_TAG        v1.0.0.0
+        GIT_SHALLOW    TRUE
+    )
+    FetchContent_MakeAvailable(CommonCMake)
+endif()
+include("${CommonCMake_MODULE_DIR}/VersionConfig.cmake")
+include("${CommonCMake_MODULE_DIR}/InstallUtils.cmake")
+
+# ============================================================
+#  版本配置：version.json（单一来源）
+#  解读逻辑由 CommonCMake 的 read_version() 提供；
 #  修改版本号只需编辑 JSON 文件，无需改动本 CMakeLists。
 # ============================================================
-include(cmake/VersionConfig.cmake)
 read_version(
-    "${CMAKE_CURRENT_SOURCE_DIR}/cmake/version.json"
+    "${CMAKE_CURRENT_SOURCE_DIR}/version.json"
     GENERAL_STATE_MACHINE
 )
-project(GeneralStateMachine VERSION ${GENERAL_STATE_MACHINE_VERSION} LANGUAGES CXX)
+# project() 已先行（不带 VERSION），此处用单一版本来源补齐版本变量，
+# 供 write_basic_package_version_file / install_export_package 等使用。
+set(PROJECT_VERSION "${GENERAL_STATE_MACHINE_VERSION}")
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -49,15 +76,17 @@ add_library(${PROJECT_NAME} SHARED
 )
 
 # Windows：生成并编译 VERSIONINFO 资源，使 DLL 携带四位版本号
-# （文件属性 -> 详细信息；版本号来自 cmake/version.json 单一来源）
+# （文件属性 -> 详细信息；版本号来自 version.json 单一来源）
 if(WIN32)
-    string(REPLACE "." "," GENERAL_STATE_MACHINE_VERSION_COMMA "${GENERAL_STATE_MACHINE_VERSION}")
-    configure_file(
-        cmake/version.rc.in
-        ${CMAKE_CURRENT_BINARY_DIR}/version.rc
-        @ONLY
+    add_windows_version_resource(${PROJECT_NAME}
+        PREFIX GENERAL_STATE_MACHINE
+        COMPANY_NAME      "GeneralStateMachine Project"
+        FILE_DESCRIPTION  "GeneralStateMachine: independent generic state machine library"
+        INTERNAL_NAME     "GeneralStateMachine"
+        LEGAL_COPYRIGHT   "Copyright (C) 2026 GeneralStateMachine Project"
+        ORIGINAL_FILENAME "GeneralStateMachine.dll"
+        PRODUCT_NAME      "GeneralStateMachine"
     )
-    target_sources(${PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/version.rc)
 endif()
 
 # 非 Windows：通过 SONAME / 版本符号链接携带版本信息
@@ -95,14 +124,17 @@ target_link_libraries(${PROJECT_NAME} PUBLIC
 #   cmake --install <build> [--prefix <dir>]
 #  用法示例见 Docs/architecture.md
 # ============================================================
+# GNUInstallDirs 仍在顶层使用（下方 install(FILES ...) 的 DESTINATION）
 include(GNUInstallDirs)
-include(CMakePackageConfigHelpers)
 
-install(TARGETS ${PROJECT_NAME}
-    EXPORT GeneralStateMachineTargets
-    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
-    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
-    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+# 目标安装 + 导出 + Config 包（install_export_package 来自 CommonCMake）：
+#   安装产物：bin/ lib/ lib/cmake/GeneralStateMachine/
+#   消费方：find_package(GeneralStateMachine CONFIG REQUIRED)
+install_export_package(
+    TARGETS ${PROJECT_NAME}
+    PACKAGE GeneralStateMachine
+    NAMESPACE GeneralStateMachine::
+    CONFIG_TEMPLATE "${CMAKE_CURRENT_SOURCE_DIR}/cmake/GeneralStateMachineConfig.cmake.in"
 )
 
 # GeneralStateMachine.dll 运行期依赖 spdlog/fmt（vcpkg 动态库），
@@ -115,29 +147,6 @@ install(FILES
 )
 
 # 注：头文件不随库安装（由消费方/源码树自行管理）
-
-install(EXPORT GeneralStateMachineTargets
-    NAMESPACE GeneralStateMachine::
-    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/GeneralStateMachine
-)
-
-# Config 包：find_package(GeneralStateMachine CONFIG REQUIRED)
-configure_package_config_file(
-    cmake/GeneralStateMachineConfig.cmake.in
-    ${CMAKE_CURRENT_BINARY_DIR}/GeneralStateMachineConfig.cmake
-    INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/GeneralStateMachine
-)
-write_basic_package_version_file(
-    ${CMAKE_CURRENT_BINARY_DIR}/GeneralStateMachineConfigVersion.cmake
-    VERSION ${PROJECT_VERSION}
-    COMPATIBILITY SameMajorVersion
-)
-
-install(FILES
-    ${CMAKE_CURRENT_BINARY_DIR}/GeneralStateMachineConfig.cmake
-    ${CMAKE_CURRENT_BINARY_DIR}/GeneralStateMachineConfigVersion.cmake
-    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/GeneralStateMachine
-)
 
 # ============================================================
 #  单元测试（gtest；include(CTest) 提供 BUILD_TESTING，默认 OFF）
