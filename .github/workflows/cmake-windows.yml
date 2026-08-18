@@ -30,7 +30,7 @@ jobs:
       - name: Setup vcpkg
         shell: bash
         run: |
-          git clone --depth 1 https://github.com/microsoft/vcpkg.git "${VCPKG_ROOT}"
+          git clone https://github.com/microsoft/vcpkg.git "${VCPKG_ROOT}"
           "${VCPKG_ROOT}/bootstrap-vcpkg.sh" -disableMetrics
 
       - name: Cache vcpkg
