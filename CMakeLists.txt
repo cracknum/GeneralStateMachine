@@ -135,6 +135,11 @@ install_export_package(
     PACKAGE GeneralStateMachine
     NAMESPACE GeneralStateMachine::
     CONFIG_TEMPLATE "${CMAKE_CURRENT_SOURCE_DIR}/cmake/GeneralStateMachineConfig.cmake.in"
+    INCLUDE_HEADERS
+        ${CMAKE_CURRENT_SOURCE_DIR}/StateMachine.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/StateMachineConfig.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/StateMachineContext.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/StateMachineFactory.h
 )
 
 # GeneralStateMachine.dll 运行期依赖 spdlog/fmt（vcpkg 动态库），
